@@ -216,6 +216,14 @@ class PyiCloudService(object):
         return self.data.get('hsaChallengeRequired', False)
 
     @property
+    def version_2fa(self):
+        """ Returns 0 for no 2fa 1 for 2steps and 2 for 2factor."""
+        if not self.requires_2fa:
+            return 0
+        else:
+            return self.data.get('dsInfo', {}).get('hsaVersion', 1)
+
+    @property
     def trusted_devices(self):
         """ Returns devices trusted for two-factor authentication."""
         request = self.session.get(
@@ -236,11 +244,20 @@ class PyiCloudService(object):
 
     def validate_verification_code(self, device, code):
         """ Verifies a verification code received on a two-factor device"""
-        device.update({
-            'verificationCode': code,
-            'trustBrowser': True
-        })
-        data = json.dumps(device)
+        if not self.requires_2fa:
+            return
+
+        if self.version_2fa == 1:
+            device.update({
+                'verificationCode': code,
+                'trustBrowser': True
+            })
+            data = json.dumps(device)
+        else:
+            data = {
+                'code': code,
+                'key': None,
+            }
 
         try:
             request = self.session.post(
