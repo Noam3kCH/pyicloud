@@ -31,7 +31,6 @@ if six.PY3:
 else:
     import cookielib
 
-
 logger = logging.getLogger(__name__)
 
 
@@ -91,7 +90,7 @@ class PyiCloudSession(requests.Session):
 
         if reason:
             if self.service.requires_2fa and \
-                    reason == 'Missing X-APPLE-WEBAUTH-TOKEN cookie':
+                            reason == 'Missing X-APPLE-WEBAUTH-TOKEN cookie':
                 raise PyiCloud2FARequiredError(response.url)
 
             api_error = PyiCloudAPIResponseError(reason, code)
@@ -111,8 +110,9 @@ class PyiCloudService(object):
         pyicloud = PyiCloudService('username@apple.com', 'password')
         pyicloud.iphone.location()
     """
+
     def __init__(
-        self, apple_id, password=None, cookie_directory=None, verify=True
+            self, apple_id, password=None, cookie_directory=None, verify=True
     ):
         if password is None:
             password = get_password_from_keyring(apple_id)
@@ -254,10 +254,10 @@ class PyiCloudService(object):
             })
             data = json.dumps(device)
         else:
-            data = {
-                'code': code,
-                'key': None,
-            }
+            data = json.dumps({
+                'verificationCode': code,
+                'trustBrowser': True
+            })
 
         try:
             request = self.session.post(
