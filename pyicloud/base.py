@@ -1,15 +1,12 @@
-import six
-import uuid
-import hashlib
 import inspect
 import json
 import logging
-import requests
 import sys
-import tempfile
-import os
-from re import match
+import uuid
+from cookielib import CookieJar
 
+import requests
+import six
 from pyicloud.exceptions import (
     PyiCloudFailedLoginException,
     PyiCloudAPIResponseError,
@@ -26,12 +23,27 @@ from pyicloud.services import (
 )
 from pyicloud.utils import get_password_from_keyring
 
-if six.PY3:
-    import http.cookiejar as cookielib
-else:
-    import cookielib
-
 logger = logging.getLogger(__name__)
+
+try:
+    import cPickle as pickle
+except ImportError:
+    import pickle
+
+
+class StringCookieJar(CookieJar):
+    def __init__(self, string=None, policy=None):
+        CookieJar.__init__(self, policy)
+        if string:
+            self._cookies = pickle.loads(string)
+
+    def load(self, string=None, policy=None):
+        CookieJar.__init__(self, policy)
+        if string:
+            self._cookies = pickle.loads(string)
+
+    def dump(self):
+        return pickle.dumps(self._cookies)
 
 
 class PyiCloudPasswordFilter(logging.Filter):
@@ -112,7 +124,7 @@ class PyiCloudService(object):
     """
 
     def __init__(
-            self, apple_id, password=None, cookie_directory=None, verify=True
+            self, apple_id, password=None, cookie_data=None, verify=True
     ):
         if password is None:
             password = get_password_from_keyring(apple_id)
@@ -129,16 +141,6 @@ class PyiCloudService(object):
 
         self._base_login_url = '%s/login' % self._setup_endpoint
 
-        if cookie_directory:
-            self._cookie_directory = os.path.expanduser(
-                os.path.normpath(cookie_directory)
-            )
-        else:
-            self._cookie_directory = os.path.join(
-                tempfile.gettempdir(),
-                'pyicloud',
-            )
-
         self.session = PyiCloudSession(self)
         self.session.verify = verify
         self.session.headers.update({
@@ -147,17 +149,15 @@ class PyiCloudService(object):
             'User-Agent': 'Opera/9.52 (X11; Linux i686; U; en)'
         })
 
-        cookiejar_path = self._get_cookiejar_path()
-        self.session.cookies = cookielib.LWPCookieJar(filename=cookiejar_path)
-        if os.path.exists(cookiejar_path):
+        self.session.cookies = StringCookieJar()
+        if cookie_data:
             try:
-                self.session.cookies.load()
-                logger.debug("Read cookies from %s", cookiejar_path)
+                self.session.cookies.load(cookie_data)
             except:
                 # Most likely a pickled cookiejar from earlier versions.
                 # The cookiejar will get replaced with a valid one after
                 # successful authentication.
-                logger.warning("Failed to read cookiejar %s", cookiejar_path)
+                logger.warning("Failed to read cookiejar")
 
         self.params = {
             'clientBuildNumber': '14E45',
@@ -192,23 +192,11 @@ class PyiCloudService(object):
         resp = req.json()
         self.params.update({'dsid': resp['dsInfo']['dsid']})
 
-        if not os.path.exists(self._cookie_directory):
-            os.mkdir(self._cookie_directory)
-        self.session.cookies.save()
-        logger.debug("Cookies saved to %s", self._get_cookiejar_path())
-
         self.data = resp
         self.webservices = self.data['webservices']
 
         logger.info("Authentication completed successfully")
         logger.debug(self.params)
-
-    def _get_cookiejar_path(self):
-        # Get path for cookiejar file
-        return os.path.join(
-            self._cookie_directory,
-            ''.join([c for c in self.user.get('apple_id') if match(r'\w', c)])
-        )
 
     @property
     def requires_2fa(self):
