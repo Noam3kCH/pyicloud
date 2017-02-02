@@ -152,7 +152,7 @@ class PyiCloudService(object):
         self.session.cookies = StringCookieJar()
         if cookie_data:
             try:
-                self.session.cookies.load(cookie_data)
+                self.session.cookies.load(str(cookie_data))
             except:
                 # Most likely a pickled cookiejar from earlier versions.
                 # The cookiejar will get replaced with a valid one after
